@@ -1,0 +1,9 @@
+[package]
+name = "wg-bot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4"
+ed25519-dalek = "2"
+serde = { version = "1", features = ["derive"] }
