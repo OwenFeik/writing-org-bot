@@ -7,7 +7,7 @@ fn decode_hex_signature(hex: &str) -> Result<[u8; 64]> {
     let mut decoded: [u8; SIGNATURE_LENGTH] = [0; SIGNATURE_LENGTH];
     let mut len = 0;
     for i in (0..hex.len()).step_by(2) {
-        decoded[i] = u8::from_str_radix(&hex[i..i + 2], 16).map_err(|e| e.to_string())?;
+        decoded[i / 2] = u8::from_str_radix(&hex[i..i + 2], 16).map_err(|e| e.to_string())?;
         len += 1;
     }
 

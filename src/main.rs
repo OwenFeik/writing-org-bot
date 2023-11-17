@@ -7,6 +7,9 @@ use discord::InteractionType;
 mod auth;
 mod discord;
 
+#[cfg(test)]
+mod test;
+
 type Error = String;
 type Result<T> = std::result::Result<T, Error>;
 
@@ -69,7 +72,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(actix_web::middleware::Logger::default())
             .service(interactions)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }
