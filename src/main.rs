@@ -4,8 +4,16 @@ use actix_web::{
 };
 use discord::InteractionType;
 
+use crate::{
+    consts::APPLICATION_ID,
+    discord::{ApplicationCommand, ApplicationCommandType},
+    req::uri,
+};
+
 mod auth;
+mod consts;
 mod discord;
+mod req;
 
 #[cfg(test)]
 mod test;
@@ -40,6 +48,29 @@ fn e401<S: ToString>(message: S) -> actix_web::Error {
     ErrorUnauthorized(msg(message))
 }
 
+async fn register_command() -> Result<()> {
+    #[derive(serde::Serialize)]
+    struct ApplicationCommandRequest {
+        name: String,
+
+        #[serde(rename = "type")]
+        _type: i32,
+    }
+
+    let resp: ApplicationCommand = req::post(
+        &uri(&format!("/applications/{APPLICATION_ID}/commands")),
+        ApplicationCommandRequest {
+            name: "announce".to_string(),
+            _type: ApplicationCommandType::ChatInput.ordinal(),
+        },
+    )
+    .await?;
+
+    dbg!(resp);
+
+    Ok(())
+}
+
 #[post("/api/interactions")]
 async fn interactions(
     req: HttpRequest,
@@ -56,6 +87,7 @@ async fn interactions(
     dbg!(&interaction);
 
     let resp = match interaction.inttype() {
+        InteractionType::ApplicationCommand => discord::InteractionResponse::pong(),
         InteractionType::Ping => discord::InteractionResponse::pong(),
         _ => return Err(e422("unhandled interaction type")),
     };
@@ -67,7 +99,11 @@ async fn interactions(
 async fn main() -> std::io::Result<()> {
     env_logger::init();
 
-    actix_web::HttpServer::new(|| {
+    if let Err(e) = register_command().await {
+        eprintln!("{e}");
+    }
+
+    actix_web::HttpServer::new(move || {
         actix_web::App::new()
             .wrap(actix_web::middleware::Logger::default())
             .service(interactions)
