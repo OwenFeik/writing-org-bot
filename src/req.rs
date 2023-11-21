@@ -1,22 +1,33 @@
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{consts::TOKEN, err, Result};
+use crate::{consts::TOKEN, discord::ErrorResponse, err, Result};
 
 pub async fn post<S: Serialize, D: DeserializeOwned>(uri: &str, body: S) -> Result<D> {
-    match awc::Client::new()
+    let body =
+        serde_json::to_vec(&body).map_err(|_| format!("Failed to serialise request to {uri}"))?;
+
+    let res = awc::Client::new()
         .post(uri)
-        .append_header(("Authorization", TOKEN))
-        .send_body(
-            serde_json::to_vec(&body)
-                .map_err(|_| format!("Failed to serialise request to {uri}"))?,
-        )
-        .await
-    {
-        Ok(mut resp) => Ok(resp
-            .json::<D>()
-            .await
-            .map_err(|e| format!("Failed to deserialise response: {e}"))?),
-        Err(e) => err(e),
+        .insert_header(("Authorization", TOKEN))
+        .content_type("application/json")
+        .send_body(body)
+        .await;
+
+    let bytes = match res {
+        Ok(mut resp) => match resp.body().await {
+            Ok(bytes) => bytes,
+            Err(e) => return err(e),
+        },
+        Err(e) => return err(e),
+    };
+
+    if let Ok(resp) = serde_json::from_slice::<D>(&bytes) {
+        Ok(resp)
+    } else {
+        match serde_json::from_slice::<ErrorResponse>(&bytes) {
+            Ok(err_resp) => Err(err_resp.message),
+            Err(e) => Err(format!("Failed to deserialise response: {e}")),
+        }
     }
 }
 

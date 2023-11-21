@@ -217,20 +217,74 @@ impl Serialize for InteractionCallbackType {
 }
 
 #[derive(Debug, Serialize)]
-struct InteractionCallbackData {}
+struct Embed {}
+
+#[derive(Debug, Serialize)]
+struct AllowedMentions {}
+
+#[derive(Debug, Serialize)]
+struct MessageComponent {}
+
+#[derive(Debug, Serialize)]
+struct Attachment {}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum InteractionCallbackData {
+    Message {
+        tts: Option<bool>,
+        content: Option<String>,
+        embeds: Option<Vec<Embed>>,
+        allowed_mentions: Option<AllowedMentions>,
+        flags: Option<i32>,
+        components: Option<Vec<MessageComponent>>,
+        attachments: Option<Vec<Attachment>>,
+    },
+}
+
+impl InteractionCallbackData {
+    fn message(content: String) -> Self {
+        Self::Message {
+            tts: Some(false),
+            content: Some(content),
+            embeds: None,
+            allowed_mentions: None,
+            flags: None,
+            components: None,
+            attachments: None,
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub struct InteractionResponse {
     #[serde(rename = "type")]
-    _type: InteractionCallbackType,
+    _type: i32,
     data: Option<InteractionCallbackData>,
 }
 
 impl InteractionResponse {
-    pub fn pong() -> Self {
-        InteractionResponse {
-            _type: InteractionCallbackType::Pong,
-            data: None,
+    fn new(inttype: InteractionCallbackType, data: Option<InteractionCallbackData>) -> Self {
+        Self {
+            _type: inttype.ordinal(),
+            data,
         }
     }
+
+    pub fn pong() -> Self {
+        Self::new(InteractionCallbackType::Pong, None)
+    }
+
+    pub fn message<S: ToString>(content: S) -> Self {
+        Self::new(
+            InteractionCallbackType::ChannelMessageWithSource,
+            Some(InteractionCallbackData::message(content.to_string())),
+        )
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ErrorResponse {
+    pub message: String,
+    code: i32,
 }

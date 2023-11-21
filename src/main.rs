@@ -2,11 +2,10 @@ use actix_web::{
     error::{ErrorBadRequest, ErrorUnauthorized, ErrorUnprocessableEntity},
     post, web, HttpRequest,
 };
-use discord::InteractionType;
 
 use crate::{
     consts::APPLICATION_ID,
-    discord::{ApplicationCommand, ApplicationCommandType},
+    discord::{ApplicationCommand, ApplicationCommandType, InteractionType},
     req::uri,
 };
 
@@ -52,6 +51,7 @@ async fn register_command() -> Result<()> {
     #[derive(serde::Serialize)]
     struct ApplicationCommandRequest {
         name: String,
+        description: String,
 
         #[serde(rename = "type")]
         _type: i32,
@@ -61,6 +61,7 @@ async fn register_command() -> Result<()> {
         &uri(&format!("/applications/{APPLICATION_ID}/commands")),
         ApplicationCommandRequest {
             name: "announce".to_string(),
+            description: "Toggle announcing in this channel.".to_string(),
             _type: ApplicationCommandType::ChatInput.ordinal(),
         },
     )
@@ -87,7 +88,9 @@ async fn interactions(
     dbg!(&interaction);
 
     let resp = match interaction.inttype() {
-        InteractionType::ApplicationCommand => discord::InteractionResponse::pong(),
+        InteractionType::ApplicationCommand => {
+            discord::InteractionResponse::message("Announcements will be sent in this channel!")
+        }
         InteractionType::Ping => discord::InteractionResponse::pong(),
         _ => return Err(e422("unhandled interaction type")),
     };
