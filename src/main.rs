@@ -11,6 +11,7 @@ use crate::{
 
 mod auth;
 mod consts;
+mod csv;
 mod discord;
 mod req;
 
