@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-type Snowflake = String;
+pub type Snowflake = String;
+
+type Timestamp = String;
 
 #[derive(Debug, Deserialize)]
 struct Channel {}
@@ -14,7 +16,49 @@ struct User {}
 struct Member {}
 
 #[derive(Debug, Deserialize)]
-struct Message {}
+struct Role {}
+
+#[derive(Debug, Deserialize)]
+struct ChannelMention {}
+
+#[derive(Debug, Deserialize)]
+struct Reaction {}
+
+#[derive(Debug, Deserialize)]
+struct MessageActivity {}
+
+#[derive(Debug, Deserialize)]
+pub struct Message {
+    id: Snowflake,
+    channel_id: Snowflake,
+    author: User,
+    content: String,
+    timestamp: Timestamp,
+    edited_timestamp: Option<Timestamp>,
+    tts: bool,
+    mention_everyone: bool,
+    mentions: Vec<User>,
+    mention_roles: Vec<Role>,
+    mention_channels: Option<Vec<ChannelMention>>,
+    attachments: Vec<Attachment>,
+    embeds: Vec<Embed>,
+    reactions: Option<Vec<Reaction>>,
+    nonce: Option<String>,
+    pinned: bool,
+    webhook_id: Option<Snowflake>,
+
+    #[serde(rename = "type")]
+    _type: i32,
+
+    activity: Option<MessageActivity>,
+    application_id: Option<Snowflake>,
+    message_reference: Option<MessageReference>,
+    flags: Option<i32>,
+    referenced_message: Option<Box<Message>>,
+    thread: Option<Channel>,
+    components: Option<Vec<MessageComponent>>,
+    position: Option<i32>,
+}
 
 #[derive(Debug, Deserialize)]
 struct Entitlement {}
@@ -216,17 +260,20 @@ impl Serialize for InteractionCallbackType {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct Embed {}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Embed {}
 
 #[derive(Debug, Serialize)]
-struct AllowedMentions {}
+pub struct AllowedMentions {}
 
-#[derive(Debug, Serialize)]
-struct MessageComponent {}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MessageReference {}
 
-#[derive(Debug, Serialize)]
-struct Attachment {}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MessageComponent {}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Attachment {}
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]

@@ -1,8 +1,11 @@
+use std::fmt::Display;
+
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{consts::TOKEN, discord::ErrorResponse, err, Result};
 
-pub async fn post<S: Serialize, D: DeserializeOwned>(uri: &str, body: S) -> Result<D> {
+pub async fn post<U: AsRef<str>, S: Serialize, D: DeserializeOwned>(uri: U, body: S) -> Result<D> {
+    let uri = uri.as_ref();
     let body =
         serde_json::to_vec(&body).map_err(|_| format!("Failed to serialise request to {uri}"))?;
 
@@ -31,7 +34,7 @@ pub async fn post<S: Serialize, D: DeserializeOwned>(uri: &str, body: S) -> Resu
     }
 }
 
-pub fn uri(api_path: &str) -> String {
+pub fn api_uri<S: Display>(api_path: S) -> String {
     const API_URL: &str = "https://discord.com/api/v10";
     format!("{API_URL}{api_path}")
 }

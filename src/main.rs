@@ -6,9 +6,10 @@ use actix_web::{
 use crate::{
     consts::APPLICATION_ID,
     discord::{ApplicationCommand, ApplicationCommandType, InteractionType},
-    req::uri,
+    req::api_uri,
 };
 
+mod announcer;
 mod auth;
 mod consts;
 mod csv;
@@ -59,7 +60,7 @@ async fn register_command() -> Result<()> {
     }
 
     let resp: ApplicationCommand = req::post(
-        &uri(&format!("/applications/{APPLICATION_ID}/commands")),
+        &api_uri(&format!("/applications/{APPLICATION_ID}/commands")),
         ApplicationCommandRequest {
             name: "announce".to_string(),
             description: "Toggle announcing in this channel.".to_string(),
