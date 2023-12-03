@@ -2,22 +2,33 @@ use std::fmt::Display;
 
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{consts::TOKEN, discord::ErrorResponse, err, Result};
+use crate::{consts::TOKEN, discord::ErrorResponse, err, msg, Result};
+
+pub async fn get<U: AsRef<str>>(uri: U) -> Result<String> {
+    reqwest::get(uri.as_ref())
+        .await
+        .map_err(msg)?
+        .text()
+        .await
+        .map_err(msg)
+}
 
 pub async fn post<U: AsRef<str>, S: Serialize, D: DeserializeOwned>(uri: U, body: S) -> Result<D> {
     let uri = uri.as_ref();
     let body =
         serde_json::to_vec(&body).map_err(|_| format!("Failed to serialise request to {uri}"))?;
 
-    let res = awc::Client::new()
+    let client = reqwest::Client::new();
+    let res = client
         .post(uri)
-        .insert_header(("Authorization", TOKEN))
-        .content_type("application/json")
-        .send_body(body)
+        .header("Authorization", TOKEN)
+        .header("Content-Type", "application/json")
+        .body(body)
+        .send()
         .await;
 
     let bytes = match res {
-        Ok(mut resp) => match resp.body().await {
+        Ok(resp) => match resp.bytes().await {
             Ok(bytes) => bytes,
             Err(e) => return err(e),
         },

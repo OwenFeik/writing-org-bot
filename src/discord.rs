@@ -222,6 +222,14 @@ impl Interaction {
             _ => InteractionType::Unknown,
         }
     }
+
+    pub fn channel(&self) -> Option<&Snowflake> {
+        self.channel_id.as_ref()
+    }
+
+    pub fn command(&self) -> Option<&str> {
+        self.data.as_ref().map(|data| data.name.as_str())
+    }
 }
 
 #[derive(Debug)]

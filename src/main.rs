@@ -2,6 +2,7 @@ use actix_web::{
     error::{ErrorBadRequest, ErrorUnauthorized, ErrorUnprocessableEntity},
     post, web, HttpRequest,
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     consts::APPLICATION_ID,
@@ -49,7 +50,7 @@ fn e401<S: ToString>(message: S) -> actix_web::Error {
     ErrorUnauthorized(msg(message))
 }
 
-async fn register_command() -> Result<()> {
+async fn register_commands() {
     #[derive(serde::Serialize)]
     struct ApplicationCommandRequest {
         name: String,
@@ -59,25 +60,37 @@ async fn register_command() -> Result<()> {
         _type: i32,
     }
 
-    let resp: ApplicationCommand = req::post(
-        &api_uri(&format!("/applications/{APPLICATION_ID}/commands")),
+    let reqs = vec![
         ApplicationCommandRequest {
             name: "announce".to_string(),
-            description: "Toggle announcing in this channel.".to_string(),
+            description: "Enable announcing in this channel.".to_string(),
             _type: ApplicationCommandType::ChatInput.ordinal(),
         },
-    )
-    .await?;
+        ApplicationCommandRequest {
+            name: "cancel".to_string(),
+            description: "Disable announcing in this channel.".to_string(),
+            _type: ApplicationCommandType::ChatInput.ordinal(),
+        },
+    ];
 
-    dbg!(resp);
-
-    Ok(())
+    for req in reqs {
+        match req::post::<&str, ApplicationCommandRequest, ApplicationCommand>(
+            &api_uri(&format!("/applications/{APPLICATION_ID}/commands")),
+            req,
+        )
+        .await
+        {
+            Ok(command) => println!("{command:?}"),
+            Err(e) => eprintln!("Failed to register command: {e}"),
+        }
+    }
 }
 
 #[post("/api/interactions")]
 async fn interactions(
     req: HttpRequest,
     body: web::Bytes,
+    commands: web::Data<UnboundedSender<announcer::AnnouncerCommand>>,
 ) -> std::result::Result<web::Json<discord::InteractionResponse>, actix_web::Error> {
     let body = String::from_utf8(body.to_vec()).map_err(e422)?;
     let sighex = extract_header(&req, "X-Signature-Ed25519").map_err(e400)?;
@@ -90,9 +103,33 @@ async fn interactions(
     dbg!(&interaction);
 
     let resp = match interaction.inttype() {
-        InteractionType::ApplicationCommand => {
-            discord::InteractionResponse::message("Announcements will be sent in this channel!")
-        }
+        InteractionType::ApplicationCommand => match (interaction.channel(), interaction.command())
+        {
+            (Some(channel), Some("announce")) => {
+                commands
+                    .send(announcer::AnnouncerCommand::RegisterChannel(
+                        channel.clone(),
+                    ))
+                    .ok();
+                discord::InteractionResponse::message(
+                    "Announcements will be sent in this channel every Sunday morning.",
+                )
+            }
+            (Some(channel), Some("cancel")) => {
+                commands
+                    .send(announcer::AnnouncerCommand::UnregisterChannel(
+                        channel.clone(),
+                    ))
+                    .ok();
+                discord::InteractionResponse::message(
+                    "Announcements will not longer be sent in this channel.",
+                )
+            }
+            (None, _) => {
+                discord::InteractionResponse::message("Use this command in a server channel.")
+            }
+            _ => discord::InteractionResponse::message("Unrecognised command."),
+        },
         InteractionType::Ping => discord::InteractionResponse::pong(),
         _ => return Err(e422("unhandled interaction type")),
     };
@@ -104,13 +141,17 @@ async fn interactions(
 async fn main() -> std::io::Result<()> {
     env_logger::init();
 
-    if let Err(e) = register_command().await {
-        eprintln!("{e}");
-    }
+    register_commands().await;
+
+    let (send, recv) = tokio::sync::mpsc::unbounded_channel();
+    announcer::run_announcer(recv).await;
 
     actix_web::HttpServer::new(move || {
+        let commands = web::Data::new(send.clone());
+
         actix_web::App::new()
             .wrap(actix_web::middleware::Logger::default())
+            .app_data(commands)
             .service(interactions)
     })
     .bind(("0.0.0.0", 8080))?

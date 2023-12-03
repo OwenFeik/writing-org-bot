@@ -8,3 +8,5 @@ pub const PUBLIC_KEY: &[u8; PUBLIC_KEY_LENGTH] = &[
 pub const TOKEN: &str = "Bot BOT-TOKEN-HERE";
 
 pub const APPLICATION_ID: &str = "0000000000000000000";
+
+pub const EVENTS_SHEET_CSV: &str = "https://file.csv";
