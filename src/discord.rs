@@ -268,8 +268,76 @@ impl Serialize for InteractionCallbackType {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Embed {}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EmbedFooter {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EmbedImage {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EmbedThumbnail {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EmbedVideo {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EmbedProvider {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EmbedAuthor {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct EmbedField {
+    name: String,
+    value: String,
+    inline: Option<bool>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Embed {
+    #[serde(rename = "type")]
+    _type: Option<String>,
+
+    title: Option<String>,
+    description: Option<String>,
+    url: Option<String>,
+    timestamp: Option<Timestamp>,
+    colour: Option<i32>,
+    footer: Option<EmbedFooter>,
+    image: Option<EmbedImage>,
+    thumbnail: Option<EmbedThumbnail>,
+    video: Option<EmbedVideo>,
+    provider: Option<EmbedProvider>,
+    author: Option<EmbedAuthor>,
+    fields: Option<Vec<EmbedField>>,
+}
+
+impl Embed {
+    const COLOUR: i32 = 0xC84200;
+
+    pub fn new<S: ToString>(title: S, description: S) -> Self {
+        Self {
+            title: Some(title.to_string()),
+            description: Some(description.to_string()),
+            colour: Some(Self::COLOUR),
+            ..Default::default()
+        }
+    }
+
+    pub fn add_field(&mut self, name: String, value: String) {
+        let field = EmbedField {
+            name,
+            value,
+            inline: None,
+        };
+
+        if let Some(fields) = &mut self.fields {
+            fields.push(field);
+        } else {
+            self.fields = Some(vec![field]);
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub struct AllowedMentions {}

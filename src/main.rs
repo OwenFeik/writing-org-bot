@@ -122,7 +122,7 @@ async fn interactions(
                     ))
                     .ok();
                 discord::InteractionResponse::message(
-                    "Announcements will not longer be sent in this channel.",
+                    "Announcements will no longer be sent in this channel.",
                 )
             }
             (None, _) => {

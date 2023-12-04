@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use chrono::Datelike;
 use serde::Serialize;
 use tokio::sync::{mpsc::UnboundedReceiver, Mutex};
 
@@ -80,10 +81,31 @@ async fn load_announcements() -> Result<Vec<Event>> {
         }
     }
 
+    // TODO remove once satisfied with testing.
+    events.push(Event {
+        name: "Test Event 1".to_string(),
+        date: "06 Dec 2023".to_string(),
+        location: "Location 1".to_string(),
+        category: None,
+        attending: None,
+        notes: Some("Notes for event".to_string()),
+    });
+    events.push(Event {
+        name: "Test Event 2".to_string(),
+        date: "13 Dec 2023".to_string(),
+        location: "Location 2".to_string(),
+        category: None,
+        attending: None,
+        notes: Some("Notes for event".to_string()),
+    });
+
     Ok(events)
 }
 
-async fn send_message(content: String, channel: &discord::Snowflake) -> Result<discord::Message> {
+async fn send_embed(
+    embed: discord::Embed,
+    channel: &discord::Snowflake,
+) -> Result<discord::Message> {
     #[derive(Default, Serialize)]
     struct CreateMessageRequest {
         content: Option<String>,
@@ -101,27 +123,66 @@ async fn send_message(content: String, channel: &discord::Snowflake) -> Result<d
 
     let uri = req::api_uri(format!("/channels/{channel}/messages"));
     let body = CreateMessageRequest {
-        content: Some(content),
+        embeds: Some(vec![embed]),
         ..Default::default()
     };
     req::post(uri, body).await
 }
 
 async fn announce(channels: &[discord::Snowflake]) {
-    let Ok(events) = load_announcements().await else {
-        return;
+    const DATE_FORMAT: &str = "%A %d/%m";
+
+    let mut events = match load_announcements().await {
+        Ok(events) => events,
+        Err(e) => {
+            eprintln!("Failed to load events: {e}");
+            return;
+        }
     };
 
-    let mut message = String::new();
+    let now = chrono::Local::now();
+
+    // Filter for events in coming week.
+    events.retain(|e| {
+        if let Some(start) = e
+            .start_time()
+            .and_then(|t| t.signed_duration_since(now).to_std().ok())
+        {
+            start < std::time::Duration::from_secs(60 * 60 * 24 * 7 + 60 * 60 * 15)
+        } else {
+            false
+        }
+    });
+
+    if events.is_empty() {
+        return;
+    }
+
+    let desc = if let Some(end) = now.checked_add_days(chrono::Days::new(7)) {
+        format!(
+            "{} through {}",
+            now.format(DATE_FORMAT),
+            end.format(DATE_FORMAT)
+        )
+    } else {
+        format!("Week beginning {}", now.format(DATE_FORMAT))
+    };
+    let mut embed = discord::Embed::new("Events this Week", &desc);
+
     for event in events {
-        message.push_str(&event.name);
-        message.push('|');
-        message.push_str(&format!("{:?}", event.start_time()));
-        message.push('\n');
+        let notes = if let Some(notes) = event.notes {
+            format!(". {notes}")
+        } else {
+            String::new()
+        };
+        embed.add_field(
+            event.name,
+            format!("{}, {}{}", event.date, event.location, notes),
+        );
     }
 
     for channel in channels {
-        if let Err(e) = send_message(message.clone(), channel).await {
+        if let Err(e) = send_embed(embed.clone(), channel).await {
             eprintln!("{e}");
         }
     }
@@ -191,9 +252,22 @@ async fn handle_command(command: AnnouncerCommand) -> Option<Vec<discord::Snowfl
     }
 }
 
+fn next_sunday() -> Option<chrono::DateTime<chrono::Local>> {
+    let now = chrono::Local::now().date_naive();
+    now.checked_sub_days(chrono::Days::new(
+        now.weekday().num_days_from_sunday().into(),
+    ))
+    .and_then(|nd| nd.checked_add_days(chrono::Days::new(7)))
+    .and_then(|nd| chrono::NaiveTime::from_hms_opt(9, 0, 0).map(|nt| nd.and_time(nt)))
+    .and_then(|ndt| chrono::TimeZone::from_local_datetime(&chrono::Local, &ndt).single())
+}
+
 pub async fn run_announcer(mut commands: UnboundedReceiver<AnnouncerCommand>) {
     let channels = Arc::new(Mutex::new(load_channels().await));
 
+    // Handle commands to register and deregister channels for announcements.
+    // The other end of this channel is used to pass commands through from
+    // discord interactions.
     let command_channels = channels.clone();
     tokio::task::spawn(async move {
         while let Some(command) = commands.recv().await {
@@ -204,12 +278,26 @@ pub async fn run_announcer(mut commands: UnboundedReceiver<AnnouncerCommand>) {
         }
     });
 
-    // TODO sunday mornings instead of 30 seconds.
+    // Publish announcements to all registered channels every sunday morning.
     tokio::task::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         loop {
+            // Wait until 9:00 next sunday morning or 1 week on error.
+            let duration = next_sunday()
+                .and_then(|dt| dt.signed_duration_since(chrono::Local::now()).to_std().ok())
+                .unwrap_or_else(|| std::time::Duration::from_secs(60 * 60 * 24 * 7));
+            let instant = std::time::Instant::now() + duration;
+
+            println!("Sleeping until: {instant:?} for next announcement.");
+
+            tokio::time::interval_at(
+                tokio::time::Instant::from_std(instant),
+                std::time::Duration::MAX,
+            )
+            .tick()
+            .await;
+
+            // Run announcement.
             announce(&channels.lock().await).await;
-            interval.tick().await;
         }
     });
 }
