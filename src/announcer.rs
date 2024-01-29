@@ -84,7 +84,7 @@ async fn load_announcements() -> Result<Vec<Event>> {
     // TODO remove once satisfied with testing.
     events.push(Event {
         name: "Test Event 1".to_string(),
-        date: "06 Dec 2023".to_string(),
+        date: "30 Jan 2024".to_string(),
         location: "Location 1".to_string(),
         category: None,
         attending: None,
@@ -92,7 +92,7 @@ async fn load_announcements() -> Result<Vec<Event>> {
     });
     events.push(Event {
         name: "Test Event 2".to_string(),
-        date: "13 Dec 2023".to_string(),
+        date: "31 Jan 2024".to_string(),
         location: "Location 2".to_string(),
         category: None,
         attending: None,
@@ -282,16 +282,20 @@ pub async fn run_announcer(mut commands: UnboundedReceiver<AnnouncerCommand>) {
     tokio::task::spawn(async move {
         loop {
             // Wait until 9:00 next sunday morning or 1 week on error.
-            let duration = next_sunday()
-                .and_then(|dt| dt.signed_duration_since(chrono::Local::now()).to_std().ok())
+            let until_next_sunday = if let Some(dt) = next_sunday() {
+                println!("Sleeping until: {dt} for next announcement.");
+                dt.signed_duration_since(chrono::Local::now()).to_std().ok()
+            } else {
+                None
+            };
+
+            let duration = until_next_sunday
                 .unwrap_or_else(|| std::time::Duration::from_secs(60 * 60 * 24 * 7));
             let instant = std::time::Instant::now() + duration;
 
-            println!("Sleeping until: {instant:?} for next announcement.");
-
             tokio::time::interval_at(
                 tokio::time::Instant::from_std(instant),
-                std::time::Duration::MAX,
+                std::time::Duration::from_secs(1),
             )
             .tick()
             .await;
