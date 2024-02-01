@@ -55,6 +55,14 @@ impl Event {
         let date = chrono::TimeZone::from_local_datetime(&chrono::Local, &naive);
         date.single()
     }
+
+    fn date_string(&self) -> String {
+        if let Some(dt) = self.start_time() {
+            dt.format("%A %d %b").to_string()
+        } else {
+            self.date.clone()
+        }
+    }
 }
 
 async fn load_announcements() -> Result<Vec<Event>> {
@@ -84,7 +92,7 @@ async fn load_announcements() -> Result<Vec<Event>> {
     // TODO remove once satisfied with testing.
     events.push(Event {
         name: "Test Event 1".to_string(),
-        date: "30 Jan 2024".to_string(),
+        date: "02 Feb 2024".to_string(),
         location: "Location 1".to_string(),
         category: None,
         attending: None,
@@ -92,7 +100,7 @@ async fn load_announcements() -> Result<Vec<Event>> {
     });
     events.push(Event {
         name: "Test Event 2".to_string(),
-        date: "31 Jan 2024".to_string(),
+        date: "03 Feb 2024".to_string(),
         location: "Location 2".to_string(),
         category: None,
         attending: None,
@@ -170,16 +178,16 @@ async fn announce(channels: &[discord::Snowflake]) {
     let mut embed = discord::Embed::new("Events this Week", &desc);
 
     for event in events {
+        let date = event.date_string();
         let notes = if let Some(notes) = event.notes {
             format!(". {notes}")
         } else {
             String::new()
         };
-        embed.add_field(
-            event.name,
-            format!("{}, {}{}", event.date, event.location, notes),
-        );
+        embed.add_field(event.name, format!("{}, {}{}", date, event.location, notes));
     }
+
+    embed.add_field(String::new(), "@everyone".to_string());
 
     for channel in channels {
         if let Err(e) = send_embed(embed.clone(), channel).await {
@@ -253,13 +261,25 @@ async fn handle_command(command: AnnouncerCommand) -> Option<Vec<discord::Snowfl
 }
 
 fn next_sunday() -> Option<chrono::DateTime<chrono::Local>> {
-    let now = chrono::Local::now().date_naive();
-    now.checked_sub_days(chrono::Days::new(
-        now.weekday().num_days_from_sunday().into(),
+    const DAY: u64 = 7; // 7 = sunday, 6 = saturday and so on.
+    const HOUR: u32 = 9;
+    const MIN: u32 = 0;
+
+    let now = chrono::Local::now();
+    let nd = now.date_naive();
+    nd.checked_sub_days(chrono::Days::new(
+        nd.weekday().num_days_from_sunday().into(),
     ))
-    .and_then(|nd| nd.checked_add_days(chrono::Days::new(7)))
-    .and_then(|nd| chrono::NaiveTime::from_hms_opt(9, 0, 0).map(|nt| nd.and_time(nt)))
+    .and_then(|nd| nd.checked_add_days(chrono::Days::new(DAY)))
+    .and_then(|nd| chrono::NaiveTime::from_hms_opt(HOUR, MIN, 0).map(|nt| nd.and_time(nt)))
     .and_then(|ndt| chrono::TimeZone::from_local_datetime(&chrono::Local, &ndt).single())
+    .and_then(|dt| {
+        if dt.signed_duration_since(now) < chrono::Duration::zero() {
+            dt.checked_add_days(chrono::Days::new(7))
+        } else {
+            Some(dt)
+        }
+    })
 }
 
 pub async fn run_announcer(mut commands: UnboundedReceiver<AnnouncerCommand>) {
